@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <!-- Linha MÁGICA para funcionar bem em telemóveis -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tier Up - Online</title>
+    
+    <!-- Scripts base -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    
+    <!-- Fonte divertida do Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Estilos Globais */
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'Nunito', sans-serif; 
+            /* Fundo gradiente moderno */
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); 
+            color: #333; 
+            margin: 0; 
+            padding: 20px; 
+            min-height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+        }
+
+        h1.titulo-jogo {
+            color: white;
+            font-weight: 900;
+            font-size: 2.8em;
+            text-shadow: 2px 4px 0px rgba(0,0,0,0.2);
+            margin-top: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        /* O "Tabuleiro" Central (A caixa branca) */
+        .janela-principal { 
+            background: white; 
+            width: 100%; 
+            max-width: 800px; 
+            padding: 30px; 
+            border-radius: 20px; 
+            box-shadow: 0 15px 35px rgba(0,0,0,0.2); 
+        }
+
+        /* Títulos secundários */
+        h2 { color: #1e3c72; font-weight: 800; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px;}
+        h3 { color: #444; }
+
+        /* Botões e Inputs */
+        input[type="text"] {
+            font-family: 'Nunito', sans-serif;
+            padding: 12px 15px;
+            font-size: 1.1em;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            width: 100%;
+            max-width: 300px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus { border-color: #2a5298; }
+
+        button {
+            font-family: 'Nunito', sans-serif;
+            background: #ff4757; /* Vermelho/Rosa vibrante */
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1.1em;
+            font-weight: 800;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 6px rgba(255, 71, 87, 0.3);
+            margin: 5px;
+        }
+        button:hover { background: #ff6b81; transform: translateY(-3px); box-shadow: 0 6px 12px rgba(255, 71, 87, 0.4); }
+        button:active { transform: translateY(0); }
+        
+        .btn-verde { background: #2ed573; box-shadow: 0 4px 6px rgba(46, 213, 115, 0.3); }
+        .btn-verde:hover { background: #7bed9f; box-shadow: 0 6px 12px rgba(46, 213, 115, 0.4); }
+
+        /* Estados Iniciais (Escondidos) */
+        #area-jogo, #area-debate, #area-resultado { display: none; }
+
+        /* Textos de Destaque */
+        .nivel-secreto { font-size: 3.5em; font-weight: 900; color: #ff4757; text-align: center; text-shadow: 1px 1px 0px rgba(0,0,0,0.1);}
+        .tema-destaque { font-size: 1.4em; color: #1e3c72; font-weight: 900; background: #f1f2f6; padding: 5px 15px; border-radius: 8px; display: inline-block;}
+        .aguardando { color: #ffa502; font-weight: bold; margin-top: 15px; display: none; text-align: center; font-size: 1.2em;}
+        
+        /* O Cartão da Resposta */
+        .resposta-item { 
+            background: #ffffff; 
+            margin: 5px; 
+            padding: 12px 20px; 
+            border-radius: 8px; 
+            font-weight: 800; 
+            font-size: 1.1em;
+            color: #2f3542;
+            border: 2px solid #dfe4ea; 
+            cursor: grab; 
+            display: inline-block; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+            user-select: none; /* Evita selecionar o texto ao arrastar */
+        }
+        .resposta-item:active { cursor: grabbing; transform: scale(1.05); }
+        
+        /* A Tier List */
+        .tier-list-container { border-radius: 10px; overflow: hidden; border: 2px solid #2f3542; background: #2f3542; }
+        .tier-row { display: flex; border-bottom: 2px solid #2f3542; }
+        .tier-row:last-child { border-bottom: none; }
+        .tier-label { 
+            width: 80px; 
+            flex-shrink: 0; /* Impede a letra de espremer no telemóvel */
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 2em; 
+            font-weight: 900; 
+            border-right: 2px solid #2f3542; 
+            color: rgba(0,0,0,0.6); 
+        }
+        .tier-dropzone { flex-grow: 1; min-height: 80px; padding: 10px; display: flex; flex-wrap: wrap; align-content: flex-start; background: #1e272e; }
+        
+        .label-s { background-color: #ff7f7f; }
+        .label-a { background-color: #ffbf7f; }
+        .label-b { background-color: #ffff7f; }
+        .label-c { background-color: #7fff7f; }
+        .label-f { background-color: #7f7fff; }
+        
+        #banco-palavras { min-height: 100px; padding: 15px; background: #f1f2f6; border: 3px dashed #ced6e0; border-radius: 12px; margin-bottom: 20px; display: flex; flex-wrap: wrap; align-content: flex-start; }
+        
+        /* Placar e Resultados */
+        .resultado-item { padding: 15px; margin-bottom: 10px; border-radius: 10px; font-size: 1.1em; box-shadow: 0 2px 4px rgba(0,0,0,0.05);}
+        .certo { background-color: #f1fdf4; border-left: 8px solid #2ed573; color: #1b5e20;}
+        .errado { background-color: #fff5f5; border-left: 8px solid #ff4757; color: #b71540;}
+        
+        .placar-container { background-color: #fff9c4; padding: 20px; border-radius: 15px; border: 2px solid #ffeaa7; margin-top: 20px; box-shadow: 0 5px 15px rgba(253, 203, 110, 0.2);}
+        .placar-lista { list-style: none; padding: 0; font-size: 1.4em; font-weight: 800; color: #d35400;}
+        .placar-lista li { padding: 8px 0; border-bottom: 2px dashed #ffeaa7; display: flex; justify-content: space-between;}
+        .placar-lista li:last-child { border-bottom: none; }
+        
+        /* Ajustes para ecrãs de telemóvel */
+        @media (max-width: 600px) {
+            h1.titulo-jogo { font-size: 2em; }
+            .janela-principal { padding: 15px; }
+            .tier-label { width: 60px; font-size: 1.5em; }
+            .resposta-item { font-size: 0.9em; padding: 8px 12px; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1 class="titulo-jogo">Tier Up Online</h1>
+    
+    <div class="janela-principal">
+        
+        <!-- LOBBY -->
+        <div id="area-lobby">
+            <h2>Bem-vindo à Sala!</h2>
+            <div id="area-login" style="text-align: center; margin: 30px 0;">
+                <input type="text" id="nome" placeholder="O seu nome/apelido..." autocomplete="off">
+                <button onclick="entrar()">Entrar na Sala</button>
+            </div>
+            
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 10px;">
+                <h3 style="margin-top: 0;">Jogadores Preparados:</h3>
+                <ul id="lista-jogadores" style="font-size: 1.2em; font-weight: bold; color: #2a5298;"></ul>
+            </div>
+            
+            <div style="text-align: center; margin-top: 20px;">
+                <button onclick="iniciar()" id="btn-iniciar" style="display: none; padding: 15px 30px; font-size: 1.3em;" class="btn-verde">🎮 Iniciar Partida!</button>
+            </div>
+        </div>
+
+        <!-- TELA DO JOGO (Fase de Escrita) -->
+        <div id="area-jogo">
+            <h2>Fase de Escrita <span style="font-size: 0.6em; color: #a4b0be; float: right; margin-top: 10px;">Rodada <span id="span-rodada-atual"></span> / 10</span></h2>
+            <p>O Tema da rodada é:<br><span id="tema-rodada" class="tema-destaque" style="margin-top: 5px;"></span></p>
+            
+            <div style="background-color: #f1f2f6; padding: 20px; border-radius: 15px; text-align: center; margin-top: 20px;">
+                <p style="font-size: 1.2em; font-weight: bold; margin-bottom: 0;">O seu nível secreto é:</p>
+                <div id="seu-nivel" class="nivel-secreto">?</div>
+                
+                <div id="caixa-resposta" style="margin-top: 20px;">
+                    <input type="text" id="input-resposta" placeholder="Escreva algo brilhante..." autocomplete="off">
+                    <br>
+                    <button onclick="enviarResposta()">Enviar Resposta</button>
+                </div>
+                <div id="mensagem-espera" class="aguardando">A aguardar pelos outros jogadores... ⏳</div>
+            </div>
+        </div>
+
+        <!-- TELA DE DEBATE (Tier List e Drag & Drop) -->
+        <div id="area-debate">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                <h2 style="border: none; margin-bottom: 0;">O Grande Debate</h2>
+                <button onclick="finalizarDebate()" class="btn-verde">✔️ Ver Resultado</button>
+            </div>
+            <p style="color: #747d8c; font-weight: bold;">Arraste as cartas para organizar o ranking perfeito.</p>
+            
+            <h3>Cartas da Rodada:</h3>
+            <div id="banco-palavras" class="zona-arrastavel"></div>
+
+            <h3>A Tier List:</h3>
+            <div class="tier-list-container">
+                <div class="tier-row"><div class="tier-label label-s">S</div><div id="tier-s" class="tier-dropzone zona-arrastavel"></div></div>
+                <div class="tier-row"><div class="tier-label label-a">A</div><div id="tier-a" class="tier-dropzone zona-arrastavel"></div></div>
+                <div class="tier-row"><div class="tier-label label-b">B</div><div id="tier-b" class="tier-dropzone zona-arrastavel"></div></div>
+                <div class="tier-row"><div class="tier-label label-c">C</div><div id="tier-c" class="tier-dropzone zona-arrastavel"></div></div>
+                <div class="tier-row"><div class="tier-label label-f">F</div><div id="tier-f" class="tier-dropzone zona-arrastavel"></div></div>
+            </div>
+        </div>
+
+        <!-- TELA DE RESULTADOS -->
+        <div id="area-resultado">
+            <h2 id="titulo-resultado" style="text-align: center; color: #1e3c72; font-size: 2em; border: none;">Fim da Rodada</h2>
+            
+            <div class="placar-container">
+                <h3 style="margin-top: 0; color: #d35400; text-align: center;">🏆 Placar de Pontos</h3>
+                <ul id="lista-placar" class="placar-lista">
+                    <!-- Preenchido pelo Javascript -->
+                </ul>
+            </div>
+            
+            <h3 style="margin-top: 30px;">O que realmente aconteceu:</h3>
+            <div id="lista-revelacoes"></div>
+            
+            <div style="text-align: center; margin-top: 30px;">
+                <button id="btn-nova-rodada" onclick="iniciar()" style="padding: 15px 30px; font-size: 1.3em;">🔄 Próxima Rodada</button>
+            </div>
+        </div>
+        
+    </div>
+
+    <!-- ===== LÓGICA JAVASCRIPT EXATAMENTE IGUAL ===== -->
+    <script>
+        const socket = io();
+        let zonasSortable = []; 
+
+        function entrar() {
+            const nome = document.getElementById('nome').value;
+            if (nome.trim() !== "") {
+                socket.emit('entrar_jogo', nome);
+                document.getElementById('area-login').style.display = 'none';
+                document.getElementById('btn-iniciar').style.display = 'inline-block';
+            }
+        }
+
+        socket.on('atualizar_lista', function(jogadores) {
+            const ul = document.getElementById('lista-jogadores');
+            ul.innerHTML = ''; 
+            jogadores.forEach(j => {
+                const li = document.createElement('li');
+                li.innerText = j;
+                ul.appendChild(li); 
+            });
+        });
+
+        function iniciar() {
+            socket.emit('iniciar_partida');
+        }
+
+        socket.on('jogo_iniciado', function(dados) {
+            document.getElementById('area-lobby').style.display = 'none';
+            document.getElementById('area-resultado').style.display = 'none';
+            document.getElementById('area-jogo').style.display = 'block';
+            
+            document.getElementById('span-rodada-atual').innerText = dados.rodada;
+            document.getElementById('tema-rodada').innerText = dados.tema;
+            
+            document.getElementById('caixa-resposta').style.display = 'block';
+            document.getElementById('mensagem-espera').style.display = 'none';
+            document.getElementById('area-debate').style.display = 'none';
+            document.getElementById('input-resposta').value = '';
+        });
+
+        socket.on('receber_nivel_secreto', function(letra) {
+            document.getElementById('seu-nivel').innerText = letra;
+        });
+
+        function enviarResposta() {
+            const texto = document.getElementById('input-resposta').value;
+            if (texto.trim() !== "") {
+                socket.emit('enviar_resposta', texto);
+                document.getElementById('caixa-resposta').style.display = 'none'; 
+                document.getElementById('mensagem-espera').style.display = 'block'; 
+            }
+        }
+
+        socket.on('fase_debate', function(respostas) {
+            document.getElementById('area-jogo').style.display = 'none';
+            document.getElementById('area-debate').style.display = 'block';
+            
+            const bancoPalavras = document.getElementById('banco-palavras');
+            bancoPalavras.innerHTML = ''; 
+            document.querySelectorAll('.tier-dropzone').forEach(tz => tz.innerHTML = '');
+            
+            respostas.forEach(r => {
+                const item = document.createElement('div');
+                item.className = 'resposta-item';
+                item.innerText = r;
+                bancoPalavras.appendChild(item);
+            });
+
+            ativarDragAndDrop();
+        });
+
+        function ativarDragAndDrop() {
+            zonasSortable.forEach(s => s.destroy());
+            zonasSortable = [];
+            const zonas = document.querySelectorAll('.zona-arrastavel');
+            
+            zonas.forEach(zona => {
+                const sortable = new Sortable(zona, {
+                    group: 'shared', 
+                    animation: 150,  
+                    ghostClass: 'sortable-ghost',
+                    onEnd: function () {
+                        mapearEnviarTabuleiro();
+                    }
+                });
+                zonasSortable.push(sortable);
+            });
+        }
+
+        function mapearEnviarTabuleiro() {
+            const estado = {
+                'banco-palavras': lerZona('banco-palavras'),
+                'tier-s': lerZona('tier-s'),
+                'tier-a': lerZona('tier-a'),
+                'tier-b': lerZona('tier-b'),
+                'tier-c': lerZona('tier-c'),
+                'tier-f': lerZona('tier-f')
+            };
+            socket.emit('movimento_tabuleiro', estado);
+        }
+
+        function lerZona(id) {
+            const zona = document.getElementById(id);
+            const itens = [];
+            zona.querySelectorAll('.resposta-item').forEach(el => itens.push(el.innerText));
+            return itens;
+        }
+
+        socket.on('tabuleiro_sincronizado', function(estado_recebido) {
+            Object.keys(estado_recebido).forEach(idZona => {
+                const zona = document.getElementById(idZona);
+                zona.innerHTML = ''; 
+                estado_recebido[idZona].forEach(texto => {
+                    const item = document.createElement('div');
+                    item.className = 'resposta-item';
+                    item.innerText = texto;
+                    zona.appendChild(item);
+                });
+            });
+        });
+
+        function finalizarDebate() {
+            const estadoFinal = {
+                'tier-s': lerZona('tier-s'),
+                'tier-a': lerZona('tier-a'),
+                'tier-b': lerZona('tier-b'),
+                'tier-c': lerZona('tier-c'),
+                'tier-f': lerZona('tier-f')
+            };
+            socket.emit('finalizar_debate', estadoFinal);
+        }
+
+        socket.on('mostrar_resultado', function(resultado) {
+            document.getElementById('area-debate').style.display = 'none';
+            document.getElementById('area-resultado').style.display = 'block';
+            
+            const btnNovaRodada = document.getElementById('btn-nova-rodada');
+            
+            if (resultado.fim_de_jogo) {
+                document.getElementById('titulo-resultado').innerText = "🏁 Fim de Jogo! (Rodada 10/10)";
+                btnNovaRodada.innerText = '🏆 Iniciar Novo Jogo';
+                btnNovaRodada.classList.remove('btn-verde');
+            } else {
+                document.getElementById('titulo-resultado').innerText = `Fim da Rodada ${resultado.rodada} / 10`;
+                btnNovaRodada.innerText = '🔄 Próxima Rodada';
+                btnNovaRodada.classList.add('btn-verde');
+            }
+            
+            const divPlacar = document.getElementById('lista-placar');
+            divPlacar.innerHTML = '';
+            
+            const placarOrdenado = Object.entries(resultado.placar).sort((a, b) => b[1] - a[1]);
+            
+            placarOrdenado.forEach(([nome, pontos], index) => {
+                const li = document.createElement('li');
+                const medalha = index === 0 && pontos > 0 ? '👑 ' : '';
+                
+                // Formatação bonita para o placar: "Nome ........... 2 pts"
+                li.innerHTML = `<span>${medalha}${nome}</span> <span>${pontos} pts</span>`;
+                divPlacar.appendChild(li);
+            });
+
+            const divRevelacoes = document.getElementById('lista-revelacoes');
+            divRevelacoes.innerHTML = '';
+            
+            resultado.detalhes.forEach(detalhe => {
+                const div = document.createElement('div');
+                div.className = detalhe.correto ? 'resultado-item certo' : 'resultado-item errado';
+                
+                const icone = detalhe.correto ? `✅ +1 Ponto para ${detalhe.autor}!` : '❌ Zero pontos.';
+                
+                div.innerHTML = `
+                    A carta <strong>"${detalhe.palavra}"</strong> era do(a) <strong>${detalhe.autor}</strong> (Nível <strong>${detalhe.nivel_real}</strong>). <br>
+                    Foi colocada no nível ${detalhe.onde_foi_colocado}. ${icone}
+                `;
+                divRevelacoes.appendChild(div);
+            });
+        });
+    </script>
+</body>
+</html>
